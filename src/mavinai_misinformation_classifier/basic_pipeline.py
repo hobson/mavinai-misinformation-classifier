@@ -1,6 +1,6 @@
 """ LogisticRegression with preprocessor to extract text length as only feature
 
->>> X = pd.DataFrame([dict(text='Lorem ipsum article text')])
+>>> X = pd.DataFrame([dict(text='Lorem ipsum article text')]*3)
 >>> Y = pd.DataFrame([
 ...     dict(
 ...         score_accountability=0.0,
@@ -16,13 +16,15 @@
 ...         is_influential=1,
 ...         is_opinionated=2,
 ...         ),
-...     ])
->>> target_names = list(trainingset[0].keys())[1:]
->>> model = build_pipeline()
+...     ]*3)
+>>> Y = Y[[c for c in Y.columns if c.startswith('is_')]]
+>>> model = build_random_guesser_pipeline()
 >>> model.fit(X, Y)
->>> model.predict()
+>>> model.predict(X)
 """
+import numpy as np
 import pandas as pd  # noqa
+from sklearn.linear_model import LogisticRegression
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
 
@@ -41,11 +43,11 @@ class TextStatsTransformer(TransformerMixin, BaseEstimator):
         return self
 
     def transform(self, X, copy=True, columns=None):
-        X = pd.DataFrame(X)
+        X = pd.DataFrame(data=X)
         if columns is not None:
             X.columns = columns
         for fun in self.functions:
-            for c in columns:
+            for c in X.columns:
                 if isinstance(fun, str):
                     try:
                         X[f"{c}_{fun.__name__}"] = getattr(X[c].str, fun)()
@@ -71,12 +73,40 @@ class DropTextTransformer(TransformerMixin, BaseEstimator):
 
     def transform(self, X, copy=True, columns=None):
         droppable_columns = []
-        for c in columns:
+        for c in X.columns:
             if X[c].dtype == 'O':
                 droppable_columns.append(c)
         X.drop(columns=droppable_columns, inplace=True)
         return X
 
 
-def build_pipeline():
-    return Pipeline([TextStatsTransformer(), DropTextTransformer()])
+class RandomEstimator(BaseEstimator):
+    def __init__(self, functions=['len']):
+        pass
+
+    def fit(self, X, y=None):
+        """Learn the idf vector (global term weights)
+
+        Inputs:
+          X (sequence of str): array of text strings
+        """
+        # raise NotImplementedError("TextStatsTransformer does not require fitting")
+        self.shape = y.shape
+        return self
+
+    def predict(self, X, copy=True, columns=None):
+        return np.random.randn(*self.shape)
+
+
+def build_random_guesser_pipeline():
+    return Pipeline([
+        ('text_len_transformer', TextStatsTransformer()),
+        ('drop_text_transformer', DropTextTransformer()),
+        ('random_guesser', RandomEstimator())])
+
+
+def build_logistic_regression_pipeline():
+    return Pipeline([
+        ('text_len_transformer', TextStatsTransformer()),
+        ('drop_text_transformer', DropTextTransformer()),
+        ('logistic_regression', LogisticRegression())])
